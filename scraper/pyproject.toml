@@ -1,0 +1,11 @@
+[project]
+name = "scraper"
+version = "0.1.0"
+description = "The Scraper Service is responsible for collecting structured data from public sources and storing it in a PostgreSQL database for further analysis."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.11.3",
+    "selenium>=4.31.0",
+    "sqlalchemy>=2.0.40",
+]
