@@ -12,6 +12,23 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    restart: on-failure
+
+  scraper:
+    build:
+      context: .
+      dockerfile: ./scraper/Dockerfile
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_HOST: db
+    restart: on-failure
 
 volumes:
   db_data:

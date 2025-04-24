@@ -1,0 +1,15 @@
+[project]
+name = "protego-hw"
+version = "0.1.0"
+description = "system that scrapes public data, analyzes it, stores it, and exposes a CRUD API"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.15.2",
+    "beautifulsoup4>=4.13.4",
+    "psycopg2-binary>=2.9.10",
+    "pydantic>=2.11.3",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "sqlalchemy>=2.0.40",
+]
