@@ -1,4 +1,4 @@
-from .settings import Base, engine, SessionLocal
+from settings import Base, engine, SessionLocal
 from .dailymed import DrugClass
 
 # Create all tables
