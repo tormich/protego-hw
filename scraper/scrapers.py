@@ -23,6 +23,15 @@ class DrugClass(BaseModel):
     url: str = Field(..., description="The URL to the drug class page")
 
 
+class Drug(BaseModel):
+    name: str = Field(..., description="The name of the drug")
+    url: str = Field(..., description="The URL to the drug page")
+    ndc_codes: List[str] = Field(default_factory=list, description="List of NDC codes for the drug")
+    active_ingredients: List[str] = Field(default_factory=list, description="List of active ingredients in the drug")
+    dosage_form: Optional[str] = Field(None, description="The dosage form of the drug")
+    route: Optional[str] = Field(None, description="The route of administration")
+
+
 class RequestsScraper:
     """Base class for scrapers using requests"""
 
@@ -181,3 +190,151 @@ class DrugClassesScraper(RequestsScraper):
             logger.error(f"Unexpected error during scraping: {e}")
             return
 
+
+class DrugScraper(RequestsScraper):
+    """Scraper for drugs from DailyMed website."""
+
+    # CSS selectors for drug listings and details
+    drug_listing_selector = "article.row"
+    drug_name_selector = ".drug-name a.drug-info-link"
+    ndc_code_selector = ".ndc-codes"
+    active_ingredient_selector = ".active-ingredients"
+    dosage_form_selector = ".dosage-form"
+    route_selector = ".route"
+
+    # Selectors for drug detail page
+    ndc_codes_detail_selector = "#ndc-codes-section table tbody tr"
+    active_ingredients_detail_selector = "#active-ingredients-section .active-ingredient"
+
+    def extract_drugs(self, url: str) -> List[Drug]:
+        """
+        Extract drugs from the specified URL.
+
+        Args:
+            url: The URL to the page containing drug listings
+
+        Returns:
+            List[Drug]: List of drugs found on the page
+        """
+        drugs = []
+        soup = self.get_url(url)
+
+        if not soup:
+            logger.error(f"Failed to load drug listing page: {url}")
+            return drugs
+
+        try:
+            # Find all drug rows in the table
+            drug_rows = soup.select(self.drug_listing_selector)
+            logger.info(f"Found {len(drug_rows)} drug entries on page {url}")
+
+            for row in drug_rows:
+                try:
+                    # Extract drug name and URL
+                    name_element = row.select_one(self.drug_name_selector)
+                    if not name_element:
+                        continue
+
+                    name = name_element.text.strip()
+                    relative_url = name_element.get('href')
+                    absolute_url = urljoin(BASE_URL, relative_url) if relative_url else None
+
+                    if not name or not absolute_url:
+                        continue
+
+                    # Extract basic information from the listing
+                    ndc_code_element = row.select_one(self.ndc_code_selector)
+                    ndc_codes = []
+                    if ndc_code_element:
+                        # Clean up and split NDC codes
+                        ndc_text = ndc_code_element.text.strip()
+                        # Remove 'view more' text
+                        ndc_text = ndc_text.replace('view more', '')
+                        # Split by commas and clean up each code
+                        for code in ndc_text.split(','):
+                            code = code.strip()
+                            if code:
+                                ndc_codes.append(code)
+
+                    active_ingredient_element = row.select_one(self.active_ingredient_selector)
+                    active_ingredients = []
+                    if active_ingredient_element:
+                        # Clean up and split active ingredients
+                        ingredient_text = active_ingredient_element.text.strip()
+                        # Split by commas and clean up each ingredient
+                        for ingredient in ingredient_text.split(','):
+                            ingredient = ingredient.strip()
+                            if ingredient:
+                                active_ingredients.append(ingredient)
+
+                    dosage_form_element = row.select_one(self.dosage_form_selector)
+                    dosage_form = dosage_form_element.text.strip() if dosage_form_element else None
+
+                    route_element = row.select_one(self.route_selector)
+                    route = route_element.text.strip() if route_element else None
+
+                    # Create drug object with basic information
+                    drug = Drug(
+                        name=name,
+                        url=absolute_url,
+                        ndc_codes=ndc_codes,
+                        active_ingredients=active_ingredients,
+                        dosage_form=dosage_form,
+                        route=route
+                    )
+
+                    # Optionally fetch detailed information
+                    # self._enrich_drug_details(drug)
+
+                    drugs.append(drug)
+                    logger.info(f"Extracted drug: {name}")
+
+                except Exception as e:
+                    logger.error(f"Error extracting drug from row: {e}")
+                    continue
+
+            logger.info(f"Extracted {len(drugs)} drugs from {url}")
+            return drugs
+
+        except Exception as e:
+            logger.error(f"Error extracting drugs from {url}: {e}")
+            return drugs
+
+    def _enrich_drug_details(self, drug: Drug) -> None:
+        """
+        Fetch additional details for a drug from its detail page.
+
+        Args:
+            drug: The drug object to enrich with additional details
+        """
+        soup = self.get_url(drug.url)
+        if not soup:
+            logger.warning(f"Could not fetch details for drug: {drug.name}")
+            return
+
+        try:
+            # Extract NDC codes from detail page
+            ndc_rows = soup.select(self.ndc_codes_detail_selector)
+            ndc_codes = []
+            for row in ndc_rows:
+                code_cell = row.select_one("td:nth-child(1)")
+                if code_cell and code_cell.text.strip():
+                    ndc_codes.append(code_cell.text.strip())
+
+            if ndc_codes:
+                drug.ndc_codes = ndc_codes
+
+            # Extract active ingredients from detail page
+            ingredient_elements = soup.select(self.active_ingredients_detail_selector)
+            active_ingredients = []
+            for element in ingredient_elements:
+                if element.text.strip():
+                    active_ingredients.append(element.text.strip())
+
+            if active_ingredients:
+                drug.active_ingredients = active_ingredients
+
+            logger.info(f"Enriched drug details for {drug.name}: {len(drug.ndc_codes)} NDC codes, {len(drug.active_ingredients)} ingredients")
+
+        except Exception as e:
+            logger.error(f"Error enriching drug details for {drug.name}: {e}")

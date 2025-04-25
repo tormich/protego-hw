@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, UniqueConstraint
+from sqlalchemy import Column, Integer, String, UniqueConstraint, Boolean
 from sqlalchemy import DateTime, ARRAY
 from sqlalchemy.sql import func
+
 from settings import Base
 
 
@@ -10,6 +11,7 @@ class DrugClass(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(length=255), nullable=False, unique=True)
     url = Column(String(length=2048), nullable=False, unique=True)
+    analyzed = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

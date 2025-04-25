@@ -1,29 +1,23 @@
-import logging
 import argparse
-from typing import List
+import logging
+from typing import List, Optional, Generator, Type, Any, Union
 
-from scraper.scrapers import DrugClassesScraper
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import BinaryExpression
+
 from models.dailymed import DrugClass
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from scraper.scrapers import DrugClassesScraper, DrugScraper
+from settings import get_db
 
 logger = logging.getLogger(__name__)
 
-from sqlalchemy.orm import Session
-from sqlalchemy import func, exists
-from sqlalchemy.exc import IntegrityError
-from settings import engine
 
-
-def insert_batch(session: Session, drug_classes: List[DrugClass]) -> int:
+def insert_batch(db, drug_classes: List[DrugClass]) -> int:
     """Insert or update a batch of drug classes into the database using UPSERT.
-
+is_analyzed
     Args:
-        session: SQLAlchemy session
+        db: Database session from get_db()
         drug_classes: List of drug classes to insert or update
 
     Returns:
@@ -63,7 +57,7 @@ def insert_batch(session: Session, drug_classes: List[DrugClass]) -> int:
             )
 
             # Execute the statement
-            result = session.execute(stmt)
+            result = db.execute(stmt)
 
             # Check if a new row was inserted or an existing row was updated
             if result.rowcount > 0:
@@ -75,19 +69,133 @@ def insert_batch(session: Session, drug_classes: List[DrugClass]) -> int:
             processed_count += 1
 
         # Commit the transaction
-        session.commit()
+        db.commit()
 
-        logger.info(f"Processed batch of {processed_count} drug classes (inserted: {inserted_count}, updated: {updated_count})")
+        logger.info(
+            f"Processed batch of {processed_count} drug classes (inserted: {inserted_count}, updated: {updated_count})")
     except Exception as e:
         # If any error occurs, rollback and log the error
-        session.rollback()
+        db.rollback()
         logger.error(f"Error during batch upsert: {e}")
 
     return processed_count
 
 
-def main(batch_size: int = 50):
-    """Main function to run the scraper.
+def get_all_by_batches(model: Type[Any], batch_size: int = 50,
+                    where_clause: Optional[Union[BinaryExpression, List[BinaryExpression]]] = None,
+                    order_by: Optional[Any] = None) -> Generator[Any, None, None]:
+    """
+    Generic function to query records from any model in batches and yield them one by one.
+
+    Args:
+        model: The SQLAlchemy model class to query
+        batch_size: Number of records to fetch in each batch
+        where_clause: Optional filter condition(s) for the query
+        order_by: Optional ordering for the query (defaults to model.id)
+
+    Yields:
+        Records from the database, one at a time
+    """
+    with get_db() as db:
+        # Build the base query
+        query = db.query(model)
+
+        # Add where clause if provided
+        if where_clause is not None:
+            if isinstance(where_clause, list):
+                for condition in where_clause:
+                    query = query.filter(condition)
+            else:
+                query = query.filter(where_clause)
+
+        # Get total count for logging
+        total_count = query.count()
+        logger.info(f"Found {total_count} {model.__name__} records in the database")
+
+        # Add ordering
+        if order_by is not None:
+            query = query.order_by(order_by)
+        else:
+            # Default ordering by id
+            query = query.order_by(model.id)
+
+        # Query in batches
+        offset = 0
+        processed_count = 0
+
+        while True:
+            # Get a batch of records
+            batch = query.limit(batch_size).offset(offset).all()
+
+            # If no more records, break the loop
+            if not batch:
+                break
+
+            # Yield each record in the batch
+            for record in batch:
+                yield record
+                processed_count += 1
+
+                # Log progress at regular intervals
+                if processed_count % (batch_size * 10) == 0 or processed_count == total_count:
+                    logger.info(f"Processed {processed_count}/{total_count} {model.__name__} records")
+
+            # Update offset for the next batch
+            offset += batch_size
+
+        logger.info(f"Completed processing {processed_count} {model.__name__} records")
+
+
+def get_dailymed_drugs(batch_size: int = 50):
+    """Get unanalyzed drug classes from the database in batches to optimize memory usage.
+
+    Args:
+        batch_size: Number of drug classes to query in each batch
+    """
+    drug_scraper = DrugScraper()
+
+    # Get database session using context manager
+    with get_db() as db:
+        # Check how many unanalyzed drug classes we have
+        unanalyzed_count = db.query(func.count(DrugClass.id)).filter(DrugClass.analyzed == False).scalar()
+        logger.info(f"Found {unanalyzed_count} unanalyzed drug classes in the database")
+
+        if unanalyzed_count == 0:
+            logger.info("No unanalyzed drug classes found. Nothing to process.")
+            return
+
+        # Process only unanalyzed drug classes
+        total_processed = 0
+
+        # Use get_all_by_batches to process unanalyzed drug classes
+        for drugclass in get_all_by_batches(
+            DrugClass,
+            batch_size=batch_size,
+            where_clause=DrugClass.analyzed == False
+        ):
+            # Process the drug class
+            drug_scraper.extract_drugs(drugclass.url)
+
+            # Mark as analyzed
+            drugclass.analyzed = True
+
+            # Increment counter
+            total_processed += 1
+
+            # Commit every batch_size records
+            if total_processed % batch_size == 0:
+                db.commit()
+                logger.info(f"Processed {total_processed}/{unanalyzed_count} unanalyzed drug classes")
+
+        # Final commit for any remaining changes
+        if total_processed % batch_size != 0:
+            db.commit()
+
+        logger.info(f"Completed processing {total_processed} unanalyzed drug classes")
+
+
+def get_dailymed_drugclasses(batch_size: int = 50):
+    """function to get drug classes from dailymed and save them in the database.
 
     Args:
         batch_size: Number of drug classes to insert in each batch
@@ -98,9 +206,10 @@ def main(batch_size: int = 50):
     batch = []
     total_processed = 0
 
-    with Session(engine) as session:
+    # Get database session using context manager
+    with get_db() as db:
         # First, let's check if we already have data in the database
-        existing_count = session.query(func.count(DrugClass.id)).scalar()
+        existing_count = db.query(func.count(DrugClass.id)).scalar()
         logger.info(f"Found {existing_count} existing drug classes in the database")
 
         for drug in scraper.scrape_all_drug_classes():
@@ -109,18 +218,18 @@ def main(batch_size: int = 50):
 
             # When batch reaches the specified size, process it
             if len(batch) >= batch_size:
-                processed = insert_batch(session, batch)
+                processed = insert_batch(db, batch)
                 total_processed += processed
                 batch = []  # Reset the batch
                 logger.info(f"Processed {total_processed} drug classes so far")
 
         # Process any remaining items in the batch
         if batch:
-            processed = insert_batch(session, batch)
+            processed = insert_batch(db, batch)
             total_processed += processed
 
         # Get the final count
-        final_count = session.query(func.count(DrugClass.id)).scalar()
+        final_count = db.query(func.count(DrugClass.id)).scalar()
         new_count = final_count - existing_count
         logger.info(f"Total drug classes in database: {final_count}")
         logger.info(f"Processed {total_processed} drug classes")
@@ -138,4 +247,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(batch_size=args.batch_size)
+    get_dailymed_drugclasses(batch_size=args.batch_size)
