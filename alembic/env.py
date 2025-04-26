@@ -14,7 +14,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from models.dailymed import Base, DrugClass
+# Import all models to ensure they're registered with the metadata
+from models.dailymed import Base, DrugClass, Drug
+from models.analytics import (
+    AnalyticsResult, NDCAnalysis, DrugClassAnalysis,
+    NameAnalysis, URLAnalysis, TimeAnalysis, TextMiningResult,
+    drug_relationships
+)
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
