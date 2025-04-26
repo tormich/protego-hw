@@ -46,5 +46,23 @@ services:
       POSTGRES_HOST: db
     restart: on-failure
 
+  api:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_HOST: db
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: on-failure
+
 volumes:
   db_data:
