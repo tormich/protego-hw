@@ -11,7 +11,7 @@ from collections import defaultdict
 from sqlalchemy import func, distinct, and_, or_, insert
 
 from models.dailymed import Drug, DrugClass
-from models.analytics import drug_relationships, AnalyticsResult
+from models.analytics import DrugRelationship, AnalyticsResult
 from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -131,18 +131,23 @@ class NetworkAnalyzer(BaseAnalyzer):
         for i in range(0, len(relationships_to_save), batch_size):
             batch = relationships_to_save[i:i+batch_size]
 
-            # Use SQLAlchemy Core for bulk insert
             # Handle conflicts manually by checking if relationships already exist
             for rel in batch:
                 # Check if relationship already exists
-                existing = self.db.query(drug_relationships).filter_by(
+                existing = self.db.query(DrugRelationship).filter_by(
                     source_drug_id=rel['source_drug_id'],
                     target_drug_id=rel['target_drug_id']
                 ).first()
 
                 if not existing:
-                    # Insert new relationship
-                    self.db.execute(insert(drug_relationships).values(rel))
+                    # Create new relationship
+                    new_relationship = DrugRelationship(
+                        source_drug_id=rel['source_drug_id'],
+                        target_drug_id=rel['target_drug_id'],
+                        relationship_type=rel['relationship_type'],
+                        weight=rel['weight']
+                    )
+                    self.db.add(new_relationship)
 
         # Commit changes
         self.db.commit()
