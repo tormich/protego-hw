@@ -18,18 +18,15 @@ RETRY_DELAY = 2  # seconds
 PAGE_LOAD_TIMEOUT = 10  # seconds
 
 
-class DrugClass(BaseModel):
+class DrugClassSchema(BaseModel):
     name: str = Field(..., description="The name of the drug class")
     url: str = Field(..., description="The URL to the drug class page")
 
 
-class Drug(BaseModel):
+class DrugSchema(BaseModel):
     name: str = Field(..., description="The name of the drug")
     url: str = Field(..., description="The URL to the drug page")
     ndc_codes: List[str] = Field(default_factory=list, description="List of NDC codes for the drug")
-    active_ingredients: List[str] = Field(default_factory=list, description="List of active ingredients in the drug")
-    dosage_form: Optional[str] = Field(None, description="The dosage form of the drug")
-    route: Optional[str] = Field(None, description="The route of administration")
 
 
 class RequestsScraper:
@@ -92,7 +89,7 @@ class DrugClassesScraper(RequestsScraper):
     listing_css_selector = "#listing > ul > li > a"
     drug_class_css_selector = "#double > li > a"
 
-    def extract_drug_classes_from_page(self, soup: BeautifulSoup) -> List[DrugClass]:
+    def extract_drug_classes_from_page(self, soup: BeautifulSoup) -> List[DrugClassSchema]:
         """
         Extract drug classes from the BeautifulSoup object.
 
@@ -100,7 +97,7 @@ class DrugClassesScraper(RequestsScraper):
             soup: BeautifulSoup object of the page
 
         Returns:
-            List[DrugClass]: List of drug classes found on the page
+            List[DrugClassSchema]: List of drug classes found on the page
         """
         drug_classes = []
         try:
@@ -115,7 +112,7 @@ class DrugClassesScraper(RequestsScraper):
                 logger.info(f"Found {name} leading to {absolute_url}")
 
                 if name and absolute_url:
-                    drug_classes.append(DrugClass(name=name, url=absolute_url))
+                    drug_classes.append(DrugClassSchema(name=name, url=absolute_url))
 
             logger.info(f"Extracted {len(drug_classes)} drug classes from current page")
             return drug_classes
@@ -152,12 +149,12 @@ class DrugClassesScraper(RequestsScraper):
             logger.error(f"Error collecting page links: {e}")
             return []
 
-    def scrape_all_drug_classes(self) -> Generator[DrugClass, None, None]:
+    def scrape_all_drug_classes(self) -> Generator[DrugClassSchema, None, None]:
         """
         Scrape all drug classes from all pages.
 
         Returns:
-            Generator[DrugClass, None, None]: Generator yielding drug classes
+            Generator[DrugClassSchema, None, None]: Generator yielding drug classes
         """
         try:
             # Get the initial page
@@ -195,18 +192,12 @@ class DrugScraper(RequestsScraper):
     """Scraper for drugs from DailyMed website."""
 
     # CSS selectors for drug listings and details
-    drug_listing_selector = "article.row"
-    drug_name_selector = ".drug-name a.drug-info-link"
+    drug_listing_selector = ".results-info"
+    drug_name_selector = ".drug-info-link"
     ndc_code_selector = ".ndc-codes"
-    active_ingredient_selector = ".active-ingredients"
-    dosage_form_selector = ".dosage-form"
-    route_selector = ".route"
+    packager_selector = "ul > li:nth-child(2) > span"
 
-    # Selectors for drug detail page
-    ndc_codes_detail_selector = "#ndc-codes-section table tbody tr"
-    active_ingredients_detail_selector = "#active-ingredients-section .active-ingredient"
-
-    def extract_drugs(self, url: str) -> List[Drug]:
+    def extract_drugs(self, url: str) -> List[DrugSchema]:
         """
         Extract drugs from the specified URL.
 
@@ -214,7 +205,7 @@ class DrugScraper(RequestsScraper):
             url: The URL to the page containing drug listings
 
         Returns:
-            List[Drug]: List of drugs found on the page
+            List[DrugSchema]: List of drugs found on the page
         """
         drugs = []
         soup = self.get_url(url)
@@ -256,38 +247,15 @@ class DrugScraper(RequestsScraper):
                             if code:
                                 ndc_codes.append(code)
 
-                    active_ingredient_element = row.select_one(self.active_ingredient_selector)
-                    active_ingredients = []
-                    if active_ingredient_element:
-                        # Clean up and split active ingredients
-                        ingredient_text = active_ingredient_element.text.strip()
-                        # Split by commas and clean up each ingredient
-                        for ingredient in ingredient_text.split(','):
-                            ingredient = ingredient.strip()
-                            if ingredient:
-                                active_ingredients.append(ingredient)
-
-                    dosage_form_element = row.select_one(self.dosage_form_selector)
-                    dosage_form = dosage_form_element.text.strip() if dosage_form_element else None
-
-                    route_element = row.select_one(self.route_selector)
-                    route = route_element.text.strip() if route_element else None
-
                     # Create drug object with basic information
-                    drug = Drug(
+                    drug = DrugSchema(
                         name=name,
                         url=absolute_url,
-                        ndc_codes=ndc_codes,
-                        active_ingredients=active_ingredients,
-                        dosage_form=dosage_form,
-                        route=route
+                        ndc_codes=ndc_codes
                     )
 
-                    # Optionally fetch detailed information
-                    # self._enrich_drug_details(drug)
-
                     drugs.append(drug)
-                    logger.info(f"Extracted drug: {name}")
+                    logger.info(f"Extracted drug: {name}; {len(ndc_codes)} NDC codes: {', '.join(ndc_codes)}")
 
                 except Exception as e:
                     logger.error(f"Error extracting drug from row: {e}")
@@ -300,41 +268,3 @@ class DrugScraper(RequestsScraper):
             logger.error(f"Error extracting drugs from {url}: {e}")
             return drugs
 
-    def _enrich_drug_details(self, drug: Drug) -> None:
-        """
-        Fetch additional details for a drug from its detail page.
-
-        Args:
-            drug: The drug object to enrich with additional details
-        """
-        soup = self.get_url(drug.url)
-        if not soup:
-            logger.warning(f"Could not fetch details for drug: {drug.name}")
-            return
-
-        try:
-            # Extract NDC codes from detail page
-            ndc_rows = soup.select(self.ndc_codes_detail_selector)
-            ndc_codes = []
-            for row in ndc_rows:
-                code_cell = row.select_one("td:nth-child(1)")
-                if code_cell and code_cell.text.strip():
-                    ndc_codes.append(code_cell.text.strip())
-
-            if ndc_codes:
-                drug.ndc_codes = ndc_codes
-
-            # Extract active ingredients from detail page
-            ingredient_elements = soup.select(self.active_ingredients_detail_selector)
-            active_ingredients = []
-            for element in ingredient_elements:
-                if element.text.strip():
-                    active_ingredients.append(element.text.strip())
-
-            if active_ingredients:
-                drug.active_ingredients = active_ingredients
-
-            logger.info(f"Enriched drug details for {drug.name}: {len(drug.ndc_codes)} NDC codes, {len(drug.active_ingredients)} ingredients")
-
-        except Exception as e:
-            logger.error(f"Error enriching drug details for {drug.name}: {e}")

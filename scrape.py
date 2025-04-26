@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.elements import BinaryExpression
 
-from models.dailymed import DrugClass
+from models.dailymed import DrugClass, Drug
 from scraper.scrapers import DrugClassesScraper, DrugScraper
 from settings import get_db
 
@@ -77,6 +77,82 @@ is_analyzed
         # If any error occurs, rollback and log the error
         db.rollback()
         logger.error(f"Error during batch upsert: {e}")
+
+    return processed_count
+
+
+def insert_drugs_batch(db, drugs: List) -> int:
+    """Insert or update a batch of drugs into the database using UPSERT.
+
+    Args:
+        db: Database session from get_db()
+        drugs: List of drugs from the scraper
+
+    Returns:
+        int: Number of successfully inserted/updated records
+    """
+    if not drugs:
+        return 0
+
+    # Keep track of successfully processed records
+    processed_count = 0
+    inserted_count = 0
+    updated_count = 0
+
+    try:
+        # Use SQLAlchemy Core for the UPSERT operation
+        from sqlalchemy.dialects.postgresql import insert
+
+        # Define the table
+        table = Drug.__table__
+
+        # Process drugs in batches to avoid excessive individual statements
+        batch_size = 10
+        for i in range(0, len(drugs), batch_size):
+            batch = drugs[i:i+batch_size]
+
+            # Process each drug in the batch
+            for drug in batch:
+                try:
+                    # Create an insert statement
+                    stmt = insert(table).values(
+                        name=drug.name,
+                        url=drug.url,
+                        ndc_codes=drug.ndc_codes
+                    )
+
+                    # Add the ON CONFLICT DO UPDATE clause
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=['name', 'url'],  # The composite unique constraint
+                        set_={
+                            "ndc_codes": drug.ndc_codes,
+                            "updated_at": func.now()
+                        }  # Update the NDC codes and timestamp
+                    )
+
+                    # Execute the statement
+                    result = db.execute(stmt)
+
+                    # Check if a new row was inserted or an existing row was updated
+                    if result.rowcount > 0:
+                        if hasattr(result, 'inserted_primary_key') and result.inserted_primary_key:
+                            inserted_count += 1
+                        else:
+                            updated_count += 1
+
+                    processed_count += 1
+                except Exception as e:
+                    # Log the error but continue with the next drug
+                    logger.error(f"Error processing drug {drug.name}: {e}")
+
+            # Commit after each batch
+            db.commit()
+
+        logger.info(f"Processed batch of {processed_count} drugs (inserted: {inserted_count}, updated: {updated_count})")
+    except Exception as e:
+        # If any error occurs, rollback and log the error
+        db.rollback()
+        logger.error(f"Error during drugs batch upsert: {e}")
 
     return processed_count
 
@@ -173,8 +249,13 @@ def get_dailymed_drugs(batch_size: int = 50):
             batch_size=batch_size,
             where_clause=DrugClass.analyzed == False
         ):
-            # Process the drug class
-            drug_scraper.extract_drugs(drugclass.url)
+            # Process the drug class and get the drugs
+            drugs = drug_scraper.extract_drugs(drugclass.url)
+
+            # Save the drugs to the database using batch processing
+            if drugs:
+                drugs_processed = insert_drugs_batch(db, drugs)
+                logger.info(f"Saved {drugs_processed} drugs from {drugclass.name}")
 
             # Mark as analyzed
             drugclass.analyzed = True
@@ -188,8 +269,7 @@ def get_dailymed_drugs(batch_size: int = 50):
                 logger.info(f"Processed {total_processed}/{unanalyzed_count} unanalyzed drug classes")
 
         # Final commit for any remaining changes
-        if total_processed % batch_size != 0:
-            db.commit()
+        db.commit()
 
         logger.info(f"Completed processing {total_processed} unanalyzed drug classes")
 
@@ -248,3 +328,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     get_dailymed_drugclasses(batch_size=args.batch_size)
+    get_dailymed_drugs(batch_size=args.batch_size)

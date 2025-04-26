@@ -24,9 +24,12 @@ class Drug(Base):
     __tablename__ = "drugs"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(length=255), nullable=False, unique=True)
-    url = Column(String(length=2048), nullable=False, unique=True)
+    name = Column(String(length=1024), nullable=False)
+    url = Column(String(length=2048), nullable=False)
     ndc_codes = Column(ARRAY(String(length=100)), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Add a composite unique constraint for name and url
+    __table_args__ = (UniqueConstraint('name', 'url', name='uix_drug_name_url'),)
