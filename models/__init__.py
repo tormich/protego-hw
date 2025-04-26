@@ -3,7 +3,7 @@ from .dailymed import DrugClass, Drug
 from .analytics import (
     AnalyticsResult, NDCAnalysis, DrugClassAnalysis,
     NameAnalysis, URLAnalysis, TimeAnalysis, TextMiningResult,
-    drug_relationships
+    DrugRelationship
 )
 
 # Create all tables
@@ -16,5 +16,5 @@ __all__ = [
     'DrugClass', 'Drug', 'init_db',
     'AnalyticsResult', 'NDCAnalysis', 'DrugClassAnalysis',
     'NameAnalysis', 'URLAnalysis', 'TimeAnalysis',
-    'TextMiningResult', 'drug_relationships'
+    'TextMiningResult', 'DrugRelationship'
 ]

@@ -211,3 +211,45 @@ class NameAnalysisList(BaseModel):
     """Schema for a list of NameAnalysis objects."""
     items: List[NameAnalysisResponse]
     total: int
+
+
+# Drug Relationship schemas
+class DrugRelationshipBase(BaseModel):
+    """Base schema for DrugRelationship."""
+    source_drug_id: int = Field(..., description="ID of the source drug")
+    target_drug_id: int = Field(..., description="ID of the target drug")
+    relationship_type: str = Field(..., description="Type of relationship between drugs")
+    weight: float = Field(..., description="Weight or strength of the relationship")
+
+
+class DrugRelationshipCreate(DrugRelationshipBase):
+    """Schema for creating a new DrugRelationship."""
+    pass
+
+
+class DrugRelationshipUpdate(BaseModel):
+    """Schema for updating a DrugRelationship."""
+    relationship_type: Optional[str] = Field(None, description="Type of relationship between drugs")
+    weight: Optional[float] = Field(None, description="Weight or strength of the relationship")
+
+
+class DrugRelationshipResponse(BaseModel):
+    """Schema for DrugRelationship response.
+
+    All fields are explicitly listed for better readability.
+    """
+    source_drug_id: int = Field(..., description="ID of the source drug")
+    target_drug_id: int = Field(..., description="ID of the target drug")
+    relationship_type: str = Field(..., description="Type of relationship between drugs")
+    weight: float = Field(..., description="Weight or strength of the relationship")
+    created_at: datetime = Field(..., description="Timestamp when this relationship was created")
+
+    class Config:
+        """Pydantic config."""
+        from_attributes = True
+
+
+class DrugRelationshipList(BaseModel):
+    """Schema for a list of DrugRelationship objects."""
+    items: List[DrugRelationshipResponse]
+    total: int

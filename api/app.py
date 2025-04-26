@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import drug, drug_class, analytics
+from api.routers import drug, drug_class, analytics, drug_relationship
 from models import init_db
 
 # Initialize the FastAPI app
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(drug.router)
 app.include_router(drug_class.router)
 app.include_router(analytics.router)
+app.include_router(drug_relationship.router)
 
 
 @app.get("/", tags=["root"])

@@ -111,16 +111,23 @@ class TimeAnalysis(Base):
         return f"<TimeAnalysis(period={self.time_period}, count={self.count})>"
 
 
-# Association table for drug relationships in network analysis
-drug_relationships = Table(
-    'drug_relationships',
-    Base.metadata,
-    Column('source_drug_id', Integer, ForeignKey('drugs.id'), primary_key=True),
-    Column('target_drug_id', Integer, ForeignKey('drugs.id'), primary_key=True),
-    Column('relationship_type', String(50), nullable=False),
-    Column('weight', Float, nullable=False, default=1.0),
-    Column('created_at', DateTime(timezone=True), server_default=func.now())
-)
+class DrugRelationship(Base):
+    """Model for drug relationships in network analysis."""
+
+    __tablename__ = "drug_relationships"
+
+    source_drug_id = Column(Integer, ForeignKey('drugs.id'), primary_key=True)
+    target_drug_id = Column(Integer, ForeignKey('drugs.id'), primary_key=True)
+    relationship_type = Column(String(50), nullable=False)
+    weight = Column(Float, nullable=False, default=1.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships to the source and target drugs
+    source_drug = relationship("Drug", foreign_keys=[source_drug_id], backref="source_relationships")
+    target_drug = relationship("Drug", foreign_keys=[target_drug_id], backref="target_relationships")
+
+    def __repr__(self):
+        return f"<DrugRelationship(source={self.source_drug_id}, target={self.target_drug_id}, type={self.relationship_type})>"
 
 
 class TextMiningResult(Base):

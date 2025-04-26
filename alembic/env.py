@@ -19,7 +19,7 @@ from models.dailymed import Base, DrugClass, Drug
 from models.analytics import (
     AnalyticsResult, NDCAnalysis, DrugClassAnalysis,
     NameAnalysis, URLAnalysis, TimeAnalysis, TextMiningResult,
-    drug_relationships
+    DrugRelationship
 )
 target_metadata = Base.metadata
 
