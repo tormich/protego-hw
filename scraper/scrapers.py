@@ -27,6 +27,7 @@ class DrugSchema(BaseModel):
     name: str = Field(..., description="The name of the drug")
     url: str = Field(..., description="The URL to the drug page")
     ndc_codes: List[str] = Field(default_factory=list, description="List of NDC codes for the drug")
+    drug_class_id: Optional[int] = Field(None, description="ID of the drug class this drug belongs to")
 
 
 class RequestsScraper:

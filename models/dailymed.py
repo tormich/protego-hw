@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, UniqueConstraint, Boolean
+from sqlalchemy import Column, Integer, String, UniqueConstraint, Boolean, ForeignKey
 from sqlalchemy import DateTime, ARRAY
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 from settings import Base
 
@@ -27,6 +28,10 @@ class Drug(Base):
     name = Column(String(length=1024), nullable=False)
     url = Column(String(length=2048), nullable=False)
     ndc_codes = Column(ARRAY(String(length=100)), nullable=True)
+    drug_class_id = Column(Integer, ForeignKey('drug_classes_urls.id'), nullable=True)
+
+    # Relationship to DrugClass
+    drug_class = relationship("DrugClass", backref="drugs")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

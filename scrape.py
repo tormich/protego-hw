@@ -118,7 +118,8 @@ def insert_drugs_batch(db, drugs: List) -> int:
                     stmt = insert(table).values(
                         name=drug.name,
                         url=drug.url,
-                        ndc_codes=drug.ndc_codes
+                        ndc_codes=drug.ndc_codes,
+                        drug_class_id=drug.drug_class_id
                     )
 
                     # Add the ON CONFLICT DO UPDATE clause
@@ -126,8 +127,9 @@ def insert_drugs_batch(db, drugs: List) -> int:
                         index_elements=['name', 'url'],  # The composite unique constraint
                         set_={
                             "ndc_codes": drug.ndc_codes,
+                            "drug_class_id": drug.drug_class_id,
                             "updated_at": func.now()
-                        }  # Update the NDC codes and timestamp
+                        }  # Update the NDC codes, drug_class_id and timestamp
                     )
 
                     # Execute the statement
@@ -254,6 +256,10 @@ def get_dailymed_drugs(batch_size: int = 50):
 
             # Save the drugs to the database using batch processing
             if drugs:
+                # Set the drug_class_id for each drug
+                for drug in drugs:
+                    drug.drug_class_id = drugclass.id
+
                 drugs_processed = insert_drugs_batch(db, drugs)
                 logger.info(f"Saved {drugs_processed} drugs from {drugclass.name}")
 
