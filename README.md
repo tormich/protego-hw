@@ -160,6 +160,47 @@ The API provides the following endpoints:
 - **Scraper**: Runs daily at midnight to collect new data
 - **Analytics**: Runs every 2 days at 00:10 (10 minutes after the scraper) to analyze the data
 
+### Analytics Modules
+
+The Analytics service performs several types of analysis on the drug data:
+
+1. **NDC Analysis**: Analyzes National Drug Code (NDC) patterns
+   - Identifies shared NDC codes across different drugs
+   - Extracts manufacturer prefixes from NDC codes
+   - Calculates distribution of NDC codes
+
+2. **Classification Analysis**: Analyzes drug classification patterns
+   - Maps drugs to their respective classes
+   - Identifies cross-classification (drugs appearing in multiple classes)
+   - Builds hierarchical relationships between drug classes
+   - Calculates statistics on drug distribution across classes
+
+3. **Name Analysis**: Analyzes drug naming patterns
+   - Identifies common prefixes and suffixes in drug names
+   - Distinguishes between brand names and generic names
+   - Analyzes naming conventions across different drug types
+
+4. **URL Analysis**: Analyzes URL patterns in drug data
+   - Identifies common URL structures
+   - Calculates URL depth and complexity metrics
+   - Maps domain distribution
+
+5. **Time Analysis**: Analyzes temporal patterns
+   - Tracks drug data changes over time
+   - Identifies trends in drug releases and updates
+
+6. **Network Analysis**: Analyzes relationships between drugs
+   - Creates a graph of drug relationships based on shared properties
+   - Identifies clusters of related drugs
+   - Calculates similarity metrics between drugs
+
+7. **Text Mining**: Extracts insights from textual drug information
+   - Identifies key terms and phrases in drug descriptions
+   - Analyzes frequency of medical terminology
+   - Extracts dosage information and common ingredients
+
+Each analysis module stores its results in the database, which can then be accessed through the API.
+
 ## Development
 
 ### Project Structure
