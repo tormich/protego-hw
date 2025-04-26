@@ -8,9 +8,9 @@ COPY pyproject.toml /app/
 COPY uv.lock /app/
 RUN uv sync --frozen --compile-bytecode
 
-COPY ../scraper /app/scraper
+COPY ../api /app/api
 COPY ../models /app/models
-COPY run_scrape.py /app/
 COPY settings.py /app/
 
-CMD ["uv", "run", "run_scrape.py"]
+EXPOSE 8000
+CMD ["uv", "run", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
